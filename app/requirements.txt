@@ -1,0 +1,16 @@
+# Customer Health Command Center — Streamlit App Dependencies
+# Keep this list minimal for fast Databricks App cold-start times.
+
+streamlit>=1.35.0
+# Core app framework. Databricks Apps supports Streamlit natively.
+
+pandas>=2.0.0
+# Result shaping, dataframe rendering, and chart data preparation.
+
+databricks-sql-connector>=3.0.0
+# Official Databricks connector for querying Unity Catalog via a SQL warehouse.
+# Auth uses the injected DATABRICKS_TOKEN (managed by Databricks Apps).
+
+altair>=5.0.0
+# Lightweight declarative charting for Streamlit. st.altair_chart() renders
+# inline without any additional frontend framework.

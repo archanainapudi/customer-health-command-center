@@ -1,0 +1,38 @@
+# =============================================================================
+# Databricks App Manifest — Customer Health Command Center
+# Workspace: https://dbc-69445b27-9472.cloud.databricks.com
+# =============================================================================
+#
+# DEPLOYMENT NOTE:
+#   Databricks Apps expects app.yaml in the root of the deployed source
+#   directory. This file lives at app/app.yaml in the repository.
+#
+#   When deploying via the Databricks UI or CLI, point the source path to
+#   the app/ subdirectory of this repo (not the repo root):
+#
+#     databricks apps deploy customer-health-command-center \
+#       --source-code-path /Workspace/Repos/archanainapudi@gmail.com/\
+#         customer-health-command-center/app
+#
+#   If you import the full repo and want to deploy from the repo root,
+#   move app.yaml and app.py to the repo root and update the command below.
+#
+# ENVIRONMENT VARIABLES:
+#   Databricks Apps automatically injects:
+#     DATABRICKS_HOST  — workspace URL
+#     DATABRICKS_TOKEN — short-lived OAuth token for the app service principal
+#
+#   You must also configure (via the Apps UI or CLI):
+#     DATABRICKS_WAREHOUSE_HTTP_PATH — HTTP path of your SQL warehouse
+#       e.g. /sql/1.0/warehouses/abc123def456
+#
+#   Optional override:
+#     DATABRICKS_CATALOG — defaults to dn_saas_demo in app.py
+# =============================================================================
+
+command: ["streamlit", "run", "app.py", "--server.port=8080", "--server.enableCORS=false", "--server.enableXsrfProtection=false"]
+
+# env:
+#   - name: DATABRICKS_WAREHOUSE_HTTP_PATH
+#     value: "/sql/1.0/warehouses/<your-warehouse-id>"
+#     # Alternatively, set this through the Databricks Apps UI after deployment.
