@@ -30,7 +30,7 @@
 #     DATABRICKS_CATALOG — defaults to dn_saas_demo in app.py
 # =============================================================================
 
-command: ["streamlit", "run", "app.py", "--server.port=8080", "--server.enableCORS=false", "--server.enableXsrfProtection=false"]
+command: ["streamlit", "run", "app.py", "--server.port=8080", "--server.headless=true", "--server.enableCORS=false", "--server.enableXsrfProtection=false"]
 
 # env:
 #   - name: DATABRICKS_WAREHOUSE_HTTP_PATH

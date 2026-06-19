@@ -67,6 +67,20 @@ def get_connection(http_path: str):
     )
 
 
+def _to_df(cursor) -> pd.DataFrame:
+    """
+    Convert a cursor result to a pandas DataFrame.
+    Tries fetchall_arrow() first (fastest); falls back to fetchall() for
+    connector versions that don't support Arrow.
+    """
+    cols = [d[0] for d in cursor.description]
+    try:
+        return cursor.fetchall_arrow().to_pandas()
+    except AttributeError:
+        rows = cursor.fetchall()
+        return pd.DataFrame(rows, columns=cols)
+
+
 # ---------------------------------------------------------------------------
 # Data loading — cached per HTTP path so filters don't re-query
 # ---------------------------------------------------------------------------
@@ -108,7 +122,7 @@ def load_account_health(http_path: str) -> pd.DataFrame:
     with get_connection(http_path) as conn:
         with conn.cursor() as cur:
             cur.execute(query)
-            return cur.fetchall_arrow().to_pandas()
+            return _to_df(cur)
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -136,7 +150,7 @@ def load_risk_segments(http_path: str) -> pd.DataFrame:
     with get_connection(http_path) as conn:
         with conn.cursor() as cur:
             cur.execute(query)
-            return cur.fetchall_arrow().to_pandas()
+            return _to_df(cur)
 
 
 # ---------------------------------------------------------------------------
