@@ -9,7 +9,9 @@ pandas>=2.0.0
 
 databricks-sql-connector>=3.4.0
 # Official Databricks connector for querying Unity Catalog via a SQL warehouse.
-# Auth uses the injected DATABRICKS_TOKEN (managed by Databricks Apps).
+
+databricks-sdk>=0.29.0
+# Uses the Databricks Apps service principal OAuth credentials exposed in env.
 
 altair>=5.0.0
 # Lightweight declarative charting for Streamlit. st.altair_chart() renders

@@ -216,6 +216,7 @@ print(f"bronze_users           : {sdf_users.count():,} rows")
 
 # COMMAND ----------
 
+# DBTITLE 1,3. bronze_product_events
 # ---------------------------------------------------------------------------
 # 3. bronze_product_events (~250,000 rows, 90 days)
 # ---------------------------------------------------------------------------
@@ -223,53 +224,72 @@ print(f"bronze_users           : {sdf_users.count():,} rows")
 # Target: ~250,000 events across 90 days and 500 accounts.
 # Riskier accounts generate fewer events (lower engagement).
 
-events = []
-event_counter = 0
+plan_event_rates = {
+    "Starter": 5,
+    "Growth": 20,
+    "Professional": 60,
+    "Enterprise": 120,
+}
 
-for acc_id in account_ids:
-    risk     = account_risk[acc_id]
-    plan     = account_plan[acc_id]
+df_event_accounts = df_accounts[["account_id", "_risk"]].copy()
+df_event_accounts["plan_tier"] = df_event_accounts["account_id"].map(account_plan)
+df_event_accounts["daily_events"] = (
+    df_event_accounts["plan_tier"].map(plan_event_rates)
+    * (1 - 0.75 * df_event_accounts["_risk"])
+).astype(int).clip(lower=0)
+df_event_accounts["skip_probability"] = 0.05 + 0.40 * df_event_accounts["_risk"]
+df_event_accounts["feature_count"] = (
+    (len(FEATURES) * (1 - 0.5 * df_event_accounts["_risk"])).astype(int)
+).clip(lower=2)
 
-    # Events per day baseline scales with plan tier
-    base_events_per_day = {"Starter": 5, "Growth": 20, "Professional": 60, "Enterprise": 120}[plan]
-    # Risk depresses event volume
-    daily_events = max(0, int(base_events_per_day * (1 - 0.75 * risk)))
+user_lookup = (
+    df_users.groupby("account_id")["user_id"]
+    .agg(list)
+    .rename("user_ids")
+    .reset_index()
+)
+df_event_accounts = df_event_accounts.merge(user_lookup, on="account_id", how="inner")
 
-    # Get users for this account
-    acct_users = df_users[df_users["account_id"] == acc_id]["user_id"].tolist()
-    if not acct_users:
-        continue
+calendar = pd.DataFrame({
+    "event_date": pd.date_range(end=pd.Timestamp(AS_OF_DATE), periods=90, freq="D")
+})
+calendar["key"] = 1
 
-    for day_offset in range(90):
-        event_date = AS_OF_DATE - timedelta(days=89 - day_offset)
+account_days = df_event_accounts.assign(key=1).merge(calendar, on="key", how="inner").drop(columns=["key"])
+active_mask = np.random.random(len(account_days)) >= account_days["skip_probability"].to_numpy()
+account_days = account_days.loc[active_mask].copy()
 
-        # Riskier accounts have more zero-event days
-        if np.random.random() < 0.05 + 0.40 * risk:
-            continue
+account_days["n_events_today"] = np.random.poisson(account_days["daily_events"].to_numpy())
+account_days = account_days.loc[account_days["n_events_today"] > 0].copy()
 
-        n_events_today = max(0, int(np.random.poisson(daily_events)))
+expanded = account_days.loc[account_days.index.repeat(account_days["n_events_today"])].reset_index(drop=True)
+expanded["event_id"] = [f"EVT-{i:08d}" for i in range(len(expanded))]
+expanded["event_hour"] = np.random.randint(7, 22, size=len(expanded))
+expanded["event_time"] = (
+    expanded["event_date"] + pd.to_timedelta(expanded["event_hour"], unit="h")
+).dt.strftime("%Y-%m-%dT%H:%M:%S")
+expanded["user_id"] = [np.random.choice(users) for users in expanded["user_ids"]]
+expanded["event_type"] = np.random.choice(EVENT_TYPES, size=len(expanded))
+expanded["feature_idx"] = [np.random.randint(count) for count in expanded["feature_count"]]
+expanded["feature_name"] = [FEATURES[idx] for idx in expanded["feature_idx"]]
+expanded["session_minutes"] = np.maximum(
+    1,
+    np.random.exponential(8 * (1 - 0.5 * expanded["_risk"].to_numpy()))
+        .astype(int)
+)
+expanded["device_type"] = np.random.choice(DEVICES, size=len(expanded), p=[0.65, 0.25, 0.10])
 
-        for _ in range(n_events_today):
-            # Feature breadth is lower for risky accounts
-            n_features_available = max(2, int(len(FEATURES) * (1 - 0.5 * risk)))
-            available_features   = FEATURES[:n_features_available]
+df_events = expanded[[
+    "event_id",
+    "event_time",
+    "account_id",
+    "user_id",
+    "event_type",
+    "feature_name",
+    "session_minutes",
+    "device_type",
+]].copy()
 
-            events.append({
-                "event_id":       f"EVT-{event_counter:08d}",
-                "event_time":     datetime.combine(
-                    event_date,
-                    datetime.min.time()
-                ).replace(hour=np.random.randint(7, 22)).isoformat(),
-                "account_id":     acc_id,
-                "user_id":        np.random.choice(acct_users),
-                "event_type":     np.random.choice(EVENT_TYPES),
-                "feature_name":   np.random.choice(available_features),
-                "session_minutes": max(1, int(np.random.exponential(8 * (1 - 0.5 * risk)))),
-                "device_type":    np.random.choice(DEVICES, p=[0.65, 0.25, 0.10]),
-            })
-            event_counter += 1
-
-df_events = pd.DataFrame(events)
 sdf_events = spark.createDataFrame(df_events)
 sdf_events.write.mode("overwrite").saveAsTable(f"{BRONZE}.bronze_product_events")
 print(f"bronze_product_events  : {sdf_events.count():,} rows")

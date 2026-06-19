@@ -4,7 +4,7 @@ Streamlit Databricks App
 Workspace: https://dbc-69445b27-9472.cloud.databricks.com
 
 Queries Unity Catalog gold tables via a Databricks SQL warehouse.
-Auth is handled automatically by Databricks Apps (injected token).
+Auth uses the Databricks Apps service principal OAuth credentials.
 The app service principal must have SELECT on gold tables and
 CAN USE on the SQL warehouse — see sql/00_setup_catalog_and_permissions.sql.
 """
@@ -14,13 +14,13 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 from databricks import sql as dbsql
+from databricks.sdk.core import Config
 
 # ---------------------------------------------------------------------------
 # Configuration — pulled from environment variables injected by Databricks Apps
 # ---------------------------------------------------------------------------
 
 DATABRICKS_HOST      = os.environ.get("DATABRICKS_HOST", "https://dbc-69445b27-9472.cloud.databricks.com")
-DATABRICKS_TOKEN     = os.environ.get("DATABRICKS_TOKEN", "")
 CATALOG              = os.environ.get("DATABRICKS_CATALOG", "dn_saas_demo")
 GOLD                 = f"{CATALOG}.gold"
 
@@ -44,15 +44,9 @@ st.set_page_config(
 
 def get_connection(http_path: str):
     """
-    Opens a Databricks SQL connection using the app service principal token.
-    Raises a clear error if required env vars are missing.
+    Opens a Databricks SQL connection using the app service principal OAuth
+    credentials injected by Databricks Apps.
     """
-    if not DATABRICKS_TOKEN:
-        st.error(
-            "DATABRICKS_TOKEN is not set. "
-            "This app must run inside Databricks Apps or with a personal access token."
-        )
-        st.stop()
     if not http_path:
         st.error(
             "SQL Warehouse HTTP path is not configured. "
@@ -60,10 +54,20 @@ def get_connection(http_path: str):
         )
         st.stop()
 
+    try:
+        cfg = Config(host=DATABRICKS_HOST)
+    except Exception as e:
+        st.error(
+            "Databricks app OAuth credentials are not available. "
+            "Expected the app runtime to provide service principal auth."
+        )
+        st.caption(str(e))
+        st.stop()
+
     return dbsql.connect(
-        server_hostname=DATABRICKS_HOST.replace("https://", ""),
+        server_hostname=cfg.host.replace("https://", ""),
         http_path=http_path,
-        access_token=DATABRICKS_TOKEN,
+        credentials_provider=lambda: cfg.authenticate,
     )
 
 
